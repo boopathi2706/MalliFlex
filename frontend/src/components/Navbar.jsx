@@ -78,34 +78,27 @@ export const Navbar = () => {
         {/* Right Action Icons */}
         <div className="flex items-center space-x-2 sm:space-x-3">
           
-          {/* Search Bar - Desktop Expandable / Mobile Direct */}
+          {/* Search Bar - Prominent Header Search */}
           {user?.role !== 'admin' && (
             <div className="relative">
-              <div className={`flex items-center rounded-full transition-all duration-300 ${
-                isSearchOpen || activeTab === 'search' || searchQuery 
-                  ? 'w-44 sm:w-64 bg-[#10251A] light:bg-[#F8F4E8] border border-[#C9A227]/50 px-3 py-1.5' 
-                  : 'w-10 h-10 justify-center hover:bg-[#10251A] light:hover:bg-[#F8F4E8]'
-              }`}>
+              <div className="flex items-center rounded-full bg-[#10251A] light:bg-[#F8F4E8] border border-[#C9A227]/50 px-3 py-1.5 w-36 sm:w-60 md:w-72 shadow-inner">
                 <Search 
                   className="w-4 h-4 text-[#C9A227] cursor-pointer shrink-0" 
-                  onClick={() => {
-                    setIsSearchOpen(!isSearchOpen);
-                    setActiveTab('search');
-                  }}
+                  onClick={() => setActiveTab('search')}
                 />
-                {(isSearchOpen || activeTab === 'search' || searchQuery) && (
-                  <input
-                    type="text"
-                    placeholder="Search movies..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      if (activeTab !== 'search') setActiveTab('search');
-                    }}
-                    className="ml-2 w-full bg-transparent text-sm text-[#FFFDF7] light:text-[#173B2B] focus:outline-none placeholder-[#A9B8AE]"
-                    autoFocus
-                  />
-                )}
+                <input
+                  type="text"
+                  placeholder="Search movies..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    if (activeTab !== 'search') setActiveTab('search');
+                  }}
+                  onFocus={() => {
+                    if (activeTab !== 'search') setActiveTab('search');
+                  }}
+                  className="ml-2 w-full bg-transparent text-xs sm:text-sm text-[#FFFDF7] light:text-[#173B2B] focus:outline-none placeholder-[#A9B8AE]"
+                />
               </div>
             </div>
           )}

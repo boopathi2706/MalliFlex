@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AppContext = createContext();
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const AppProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
@@ -17,6 +17,10 @@ export const AppProvider = ({ children }) => {
   const [movies, setMovies] = useState([]);
   const [favourites, setFavourites] = useState([]);
   const [loadingMovies, setLoadingMovies] = useState(true);
+  const [movieError, setMovieError] = useState(null);
+
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState(null);
 
   const [activeTab, setActiveTab] = useState('home');
   const [selectedMovie, setSelectedMovie] = useState(null);
@@ -46,13 +50,17 @@ export const AppProvider = ({ children }) => {
   const fetchMovies = async () => {
     try {
       setLoadingMovies(true);
-      const res = await fetch(`${API_BASE}/movies`);
+      setMovieError(null);
+      const res = await fetch(`${API_BASE}/api/movies`);
       if (res.ok) {
         const data = await res.json();
-        setMovies(data);
+        setMovies(Array.isArray(data) ? data : (data.movies || []));
+      } else {
+        setMovieError('Unable to load movies. Please try again.');
       }
     } catch (err) {
       console.error('Error fetching movies from backend:', err);
+      setMovieError('Unable to load movies. Please try again.');
     } finally {
       setLoadingMovies(false);
     }
@@ -61,7 +69,7 @@ export const AppProvider = ({ children }) => {
   // Fetch Favourites from Backend
   const fetchFavourites = async () => {
     try {
-      const res = await fetch(`${API_BASE}/favourites`);
+      const res = await fetch(`${API_BASE}/api/favourites`);
       if (res.ok) {
         const data = await res.json();
         setFavourites(data);
@@ -88,7 +96,7 @@ export const AppProvider = ({ children }) => {
   // API Call: Toggle Favourite
   const toggleFavourite = async (movieId) => {
     try {
-      const res = await fetch(`${API_BASE}/favourites/toggle`, {
+      const res = await fetch(`${API_BASE}/api/favourites/toggle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ movieId })
@@ -97,16 +105,23 @@ export const AppProvider = ({ children }) => {
         const data = await res.json();
         setFavourites(data.favourites);
         showToast(data.isFav ? 'Added to favourites' : 'Removed from favourites');
+      } else {
+        setFavourites(prev => 
+          prev.includes(movieId) ? prev.filter(id => id !== movieId) : [...prev, movieId]
+        );
       }
     } catch (err) {
       console.error('Error toggling favourite:', err);
+      setFavourites(prev => 
+        prev.includes(movieId) ? prev.filter(id => id !== movieId) : [...prev, movieId]
+      );
     }
   };
 
   // API Call: Add Movie
   const addMovie = async (newMovie) => {
     try {
-      const res = await fetch(`${API_BASE}/movies`, {
+      const res = await fetch(`${API_BASE}/api/movies`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newMovie)
@@ -124,7 +139,7 @@ export const AppProvider = ({ children }) => {
   // API Call: Edit Movie
   const editMovie = async (updatedMovie) => {
     try {
-      const res = await fetch(`${API_BASE}/movies/${updatedMovie.id}`, {
+      const res = await fetch(`${API_BASE}/api/movies/${updatedMovie.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedMovie)
@@ -142,7 +157,7 @@ export const AppProvider = ({ children }) => {
   // API Call: Delete Movie
   const deleteMovie = async (movieId) => {
     try {
-      const res = await fetch(`${API_BASE}/movies/${movieId}`, {
+      const res = await fetch(`${API_BASE}/api/movies/${movieId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -158,7 +173,7 @@ export const AppProvider = ({ children }) => {
   // API Call: Login User
   const loginUser = async (username, password) => {
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -186,26 +201,65 @@ export const AppProvider = ({ children }) => {
 
   const openMovieDetails = (movie) => {
     setSelectedMovie(movie);
+    setDetailError(null);
     setActiveTab('details');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // API Call: Play Movie / Mark Watched
-  const playMovie = async (movie) => {
-    setSelectedMovie(movie);
-    try {
-      const res = await fetch(`${API_BASE}/movies/${movie.id}/watch`, {
-        method: 'POST'
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setMovies(prev => prev.map(m => m.id === updated.id ? updated : m));
-      }
-    } catch (err) {
-      console.error('Error marking movie watched:', err);
+  // Fetch Movie Details Watch URL from Python API
+  const fetchWatchUrl = async (movieUrl) => {
+    if (!movieUrl) {
+      throw new Error('Invalid movie URL');
     }
-    setActiveTab('watch');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const res = await fetch(`${API_BASE}/api/movie/details`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ movieUrl })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || errData.error || 'Unable to retrieve movie watch URL');
+    }
+    const data = await res.json();
+    if (!data.watchUrl) {
+      throw new Error('Watch URL missing in response');
+    }
+    return data.watchUrl;
+  };
+
+  // API Call: Play Movie / Scrape watch URL
+  const playMovie = async (movie) => {
+    if (loadingDetail) return; // Prevent concurrent requests
+    
+    setSelectedMovie(movie);
+    setDetailError(null);
+    setLoadingDetail(true);
+
+    try {
+      let watchUrl = movie.videoUrl;
+
+      // If movie has a movieUrl but no direct videoUrl yet, scrape it from python backend
+      if (movie.movieUrl && (!watchUrl || watchUrl.includes('example.com') || watchUrl.includes('sample'))) {
+        watchUrl = await fetchWatchUrl(movie.movieUrl);
+      }
+
+      if (!watchUrl) {
+        throw new Error('Unable to load this movie. Please try again.');
+      }
+
+      setSelectedMovie(prev => ({ ...prev, videoUrl: watchUrl, watched: true }));
+      setActiveTab('watch');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      fetch(`${API_BASE}/api/movies/${movie.id}/watch`, { method: 'POST' }).catch(() => {});
+
+    } catch (err) {
+      console.error('Error in playMovie:', err);
+      setDetailError(err.message || 'Unable to load this movie. Please try again.');
+      showToast(err.message || 'Unable to load this movie. Please try again.');
+    } finally {
+      setLoadingDetail(false);
+    }
   };
 
   return (
@@ -218,6 +272,9 @@ export const AppProvider = ({ children }) => {
       movies,
       favourites,
       loadingMovies,
+      movieError,
+      loadingDetail,
+      detailError,
       toggleFavourite,
       addMovie,
       editMovie,

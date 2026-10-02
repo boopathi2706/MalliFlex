@@ -5,7 +5,7 @@ import { Play, Heart, ArrowLeft, Calendar, Clock, Globe, Film, Sparkles } from '
 import { motion } from 'framer-motion';
 
 export const MovieDetails = () => {
-  const { selectedMovie, movies, favourites, toggleFavourite, playMovie, setActiveTab } = useApp();
+  const { selectedMovie, movies, favourites, toggleFavourite, playMovie, setActiveTab, loadingDetail, detailError } = useApp();
 
   if (!selectedMovie) return null;
 
@@ -13,7 +13,17 @@ export const MovieDetails = () => {
   const relatedMovies = movies.filter(m => m.id !== selectedMovie.id && (m.category === selectedMovie.category || m.language === selectedMovie.language));
 
   return (
-    <div className="pb-24 pt-16">
+    <div className="pb-24 pt-16 relative">
+      {/* Loading Detail Overlay */}
+      {loadingDetail && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+          <div className="p-8 rounded-2xl bg-[#10251A] border border-[#C9A227]/40 shadow-2xl text-center space-y-4 max-w-sm">
+            <div className="w-12 h-12 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin mx-auto" />
+            <h3 className="text-xl font-bold text-[#FFFDF7]">Loading movie...</h3>
+            <p className="text-xs text-[#A9B8AE]">Extracting watch stream for {selectedMovie.title}</p>
+          </div>
+        </div>
+      )}
       {/* Back button header */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <button

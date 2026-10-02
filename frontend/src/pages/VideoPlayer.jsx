@@ -26,16 +26,28 @@ export const VideoPlayer = () => {
         </div>
 
         {/* Video Player Container */}
-        <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-[#173B2B] shadow-2xl">
-          <video
-            src={selectedMovie.videoUrl}
-            controls
-            autoPlay
-            className="w-full h-full object-contain"
-            poster={selectedMovie.backdropUrl || selectedMovie.posterUrl}
-          >
-            Your browser does not support HTML video play back.
-          </video>
+        <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-[#173B2B] shadow-2xl flex items-center justify-center">
+          {selectedMovie.videoUrl ? (
+            <video
+              src={selectedMovie.videoUrl}
+              controls
+              autoPlay
+              className="w-full h-full object-contain"
+              poster={selectedMovie.backdropUrl || selectedMovie.posterUrl}
+            >
+              Your browser does not support HTML video playback.
+            </video>
+          ) : (
+            <div className="text-center p-6 space-y-3">
+              <p className="text-rose-400 font-semibold text-base">Unable to load this movie. Please try again.</p>
+              <button
+                onClick={() => setActiveTab('details')}
+                className="px-6 py-2 rounded-full bg-[#C9A227] text-[#08130D] font-bold text-xs"
+              >
+                Return to Movie Details
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Movie Info Below Video */}
