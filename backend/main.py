@@ -92,6 +92,16 @@ def is_url_allowed(url_str: str) -> bool:
     except Exception:
         return False
 
+# Helper function to get scraped movies from json or scrape if missing
+def scraped_movies():
+    if os.path.exists(MOVIES_JSON_PATH):
+        try:
+            with open(MOVIES_JSON_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error reading {MOVIES_JSON_PATH}: {e}")
+    return scrape_movies()
+
 # --- API Endpoints ---
 
 @app.get("/api/movies")
@@ -103,13 +113,7 @@ def get_movies():
     4. Return the movie list as JSON formatted for the frontend.
     """
     try:
-        if not os.path.exists(MOVIES_JSON_PATH):
-            logger.info("movies.json not found. Triggering scrape_movies()...")
-            movies_data = scrape_movies()
-        else:
-            logger.info(f"Reading movies from existing {MOVIES_JSON_PATH}")
-            with open(MOVIES_JSON_PATH, "r", encoding="utf-8") as f:
-                movies_data = json.load(f)
+        movies_data = scrape_movies()
 
         # Enrich movies with required UI properties if not present
         formatted_movies = []
@@ -237,6 +241,51 @@ def toggle_favourite(payload: ToggleFavouriteRequest):
 def watch_movie(movie_id: str):
     in_memory_watched[movie_id] = True
     return {"id": movie_id, "watched": True, "watchProgress": 20}
+
+@app.post("/api/movies")
+def create_movie(movie: MovieItem):
+    movies_data = scraped_movies()
+    new_movie = movie.model_dump()
+    if not new_movie.get("id"):
+        new_movie["id"] = f"movie_{len(movies_data) + 1}"
+    movies_data.insert(0, new_movie)
+    try:
+        with open(MOVIES_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(movies_data, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Failed to update movies.json: {e}")
+    return new_movie
+
+@app.put("/api/movies/{movie_id}")
+def update_movie(movie_id: str, movie: MovieItem):
+    movies_data = scraped_movies()
+    updated_movie = movie.model_dump()
+    updated_movie["id"] = movie_id
+    found = False
+    for idx, m in enumerate(movies_data):
+        if m.get("id") == movie_id or f"movie_{idx + 1}" == movie_id:
+            movies_data[idx] = updated_movie
+            found = True
+            break
+    if not found:
+        movies_data.append(updated_movie)
+    try:
+        with open(MOVIES_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(movies_data, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Failed to update movies.json: {e}")
+    return updated_movie
+
+@app.delete("/api/movies/{movie_id}")
+def delete_movie_endpoint(movie_id: str):
+    movies_data = scraped_movies()
+    movies_data = [m for idx, m in enumerate(movies_data) if m.get("id") != movie_id and f"movie_{idx + 1}" != movie_id]
+    try:
+        with open(MOVIES_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(movies_data, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Failed to update movies.json: {e}")
+    return {"success": True, "id": movie_id}
 
 @app.post("/api/movies/refresh")
 def refresh_movies():
